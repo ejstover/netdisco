@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Iterable, List
 
 DEFAULT_PACKAGING_REPO = "https://github.com/netdisco/netdisco-docker.git"
-DEFAULT_BRANCH = "main"
+DEFAULT_BRANCH = "master"
 DEFAULT_WORKSPACE = Path.home() / "netdisco-docker-workspace"
 
 

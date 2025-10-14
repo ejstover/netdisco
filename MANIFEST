@@ -137,6 +137,7 @@ lib/App/Netdisco/SSHCollector/Platform/VOSS.pm
 lib/App/Netdisco/Transport/Python.pm
 lib/App/Netdisco/Transport/SNMP.pm
 lib/App/Netdisco/Transport/SSH.pm
+lib/App/Netdisco/Util/CableType.pm
 lib/App/Netdisco/Util/CustomFields.pm
 lib/App/Netdisco/Util/Device.pm
 lib/App/Netdisco/Util/DeviceAuth.pm
@@ -546,6 +547,7 @@ share/schema_versions/App-Netdisco-DB-9-10-PostgreSQL.sql
 share/schema_versions/App-Netdisco-DB-90-91-PostgreSQL.sql
 share/schema_versions/App-Netdisco-DB-91-92-PostgreSQL.sql
 share/schema_versions/App-Netdisco-DB-92-93-PostgreSQL.sql
+share/schema_versions/App-Netdisco-DB-93-94-PostgreSQL.sql
 share/views/admintask.tt
 share/views/ajax/admintask/duplicatedevices.tt
 share/views/ajax/admintask/jobqueue.tt

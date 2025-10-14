@@ -6,6 +6,7 @@ use Dancer qw/:syntax :script/;
 use Dancer::Plugin::DBIC 'schema';
 
 use App::Netdisco::Util::DNS qw/hostname_from_ip ipv4_from_hostname/;
+use App::Netdisco::Util::CableType qw/color_for_medium choose_medium/;
 use Graph::Undirected ();
 use GraphViz ();
 
@@ -19,7 +20,7 @@ our @EXPORT_OK = qw/
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
 # nothing to see here, please move along...
-our ($ip, $label, $isdev, $devloc, %GRAPH, %GRAPH_SPEED);
+our ($ip, $label, $isdev, $devloc, %GRAPH, %GRAPH_SPEED, %GRAPH_MEDIUM);
 
 =head1 NAME
 
@@ -200,43 +201,51 @@ sub graph_each  {
     while (my $e = shift @edges){
         my $link = $e->[0];
         my $dest = $e->[1];
-        my $speed = $GRAPH_SPEED{$link}->{$dest}->{speed};
-
-        if (!defined($speed)) {
-            info "  ! No link speed for $link -> $dest";
-            $speed = 0;
-        }
-
         my %edge = ();
-        my $val = ''; my $suffix = '';
 
-        if ($speed =~ /^([\d.]+)\s+([a-z])bps$/i) {
-            $val = $1; $suffix = $2;
+        my $medium = $GRAPH_MEDIUM{$link}->{$dest}->{medium}
+          || $GRAPH_MEDIUM{$dest}->{$link}->{medium};
+
+        my $medium_color = $medium ? color_for_medium($medium) : undef;
+
+        if ($medium_color) {
+            $edge{color} = $medium_color;
         }
+        else {
+            my $speed = $GRAPH_SPEED{$link}->{$dest}->{speed};
 
-        if ( ($suffix eq 'k') or ($speed =~ m/(t1|ds3)/i) ){
-            $edge{color} = 'green';
-            $edge{style} = 'dotted';
-        }
-
-        if ($suffix eq 'M'){
-            if ($val < 10.0){
-                $edge{color} = 'green';
-                #$edge{style} = 'dotted';
-                $edge{style} = 'dashed';
-            } elsif ($val < 100.0){
-                $edge{color} = '#8b7e66';
-                #$edge{style} = 'normal';
-                $edge{style} = 'solid';
-            } else {
-                $edge{color} = '#ffe7ba';
-                $edge{style} = 'solid';
+            if (!defined($speed)) {
+                info "  ! No link speed for $link -> $dest";
+                $speed = 0;
             }
-        }
 
-        if ($suffix eq 'G'){
-            #$edge{style} = 'bold';
-            $edge{color} = 'cyan1';
+            my $val = ''; my $suffix = '';
+
+            if ($speed =~ /^([\d.]+)\s+([a-z])bps$/i) {
+                $val = $1; $suffix = $2;
+            }
+
+            if ( ($suffix eq 'k') or ($speed =~ m/(t1|ds3)/i) ){
+                $edge{color} = 'green';
+                $edge{style} = 'dotted';
+            }
+
+            if ($suffix eq 'M'){
+                if ($val < 10.0){
+                    $edge{color} = 'green';
+                    $edge{style} = 'dashed';
+                } elsif ($val < 100.0){
+                    $edge{color} = '#8b7e66';
+                    $edge{style} = 'solid';
+                } else {
+                    $edge{color} = '#ffe7ba';
+                    $edge{style} = 'solid';
+                }
+            }
+
+            if ($suffix eq 'G'){
+                $edge{color} = 'cyan1';
+            }
         }
 
         # Add extra styles to edges (mainly for modifying width)
@@ -373,9 +382,14 @@ Nodes without topology information are not included.
 sub make_graph {
     my $G = Graph::Undirected->new();
 
+    %GRAPH = ();
+    %GRAPH_SPEED = ();
+    %GRAPH_MEDIUM = ();
+
     my $devices = schema(vars->{'tenant'})->resultset('Device')
         ->search({}, { columns => [qw/ip dns location /] });
     my $links = schema(vars->{'tenant'})->resultset('DevicePort')
+        ->with_properties
         ->search({remote_ip => { -not => undef }},
                  { columns => [qw/ip remote_ip speed remote_type/]});
     my %aliases = map {$_->alias => $_->ip}
@@ -417,7 +431,17 @@ sub make_graph {
             debug "  make_graph() - Skipping IP Phone. $source -> $dest ($type)";
             next;
         }
-        next if exists $link_seen{$source}->{$dest};
+        my $medium = $link->get_column('cable_type');
+
+        if (exists $link_seen{$source}->{$dest}) {
+            if ($medium) {
+                $GRAPH_MEDIUM{$source}->{$dest}->{medium}
+                  = choose_medium($GRAPH_MEDIUM{$source}->{$dest}->{medium}, $medium);
+                $GRAPH_MEDIUM{$dest}->{$source}->{medium}
+                  = choose_medium($GRAPH_MEDIUM{$dest}->{$source}->{medium}, $medium);
+            }
+            next;
+        }
 
         push(@{ $linkmap{$source} }, $dest);
 
@@ -427,6 +451,12 @@ sub make_graph {
 
         $GRAPH_SPEED{$source}->{$dest}->{speed}=$speed;
         $GRAPH_SPEED{$dest}->{$source}->{speed}=$speed;
+
+        if ($medium) {
+            $GRAPH_MEDIUM{$source}->{$dest}->{medium} = $medium;
+            $GRAPH_MEDIUM{$dest}->{$source}->{medium}
+              = choose_medium($GRAPH_MEDIUM{$dest}->{$source}->{medium}, $medium);
+        }
     }
 
     foreach my $link (keys %linkmap) {

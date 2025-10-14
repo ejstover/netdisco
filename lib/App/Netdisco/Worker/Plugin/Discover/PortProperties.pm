@@ -13,6 +13,13 @@ use App::Netdisco::Util::Permission 'acl_matches';
 use App::Netdisco::Util::PortAccessEntity 'update_pae_attributes';
 use App::Netdisco::Util::FastResolver 'hostnames_resolve_async';
 use App::Netdisco::Util::Device qw/is_discoverable match_to_setting/;
+use App::Netdisco::Util::CableType qw/
+  build_port_lookup
+  find_port_in_text
+  module_medium
+  infer_port_medium
+  choose_medium
+/;
 
 register_worker({ phase => 'main', driver => 'snmp' }, sub {
   my ($job, $workerconf) = @_;
@@ -162,6 +169,67 @@ register_worker({ phase => 'main', driver => 'snmp' }, sub {
             }
         }
     }
+  }
+
+  my $port_lookup = build_port_lookup($device_ports);
+  my @modules = $device->modules
+    ->search({}, { columns => [qw/index parent name description model/] })
+    ->all;
+
+  my %module_by_index = map { $_->index => $_ } @modules;
+  my %module_to_port;
+
+  foreach my $module (@modules) {
+    foreach my $field ($module->name, $module->description) {
+      next unless defined $field && length $field;
+      my $port = find_port_in_text($field, $port_lookup) or next;
+      $module_to_port{ $module->index } = $port;
+      last;
+    }
+  }
+
+  my $resolve_port_for_module = sub {
+    my $module = shift or return;
+    my $index  = $module->index;
+
+    return $module_to_port{$index} if exists $module_to_port{$index};
+
+    my %seen = ($index => 1);
+    my $current = $module;
+
+    while ($current) {
+      my $parent_idx = $current->parent;
+      last unless defined $parent_idx;
+      return $module_to_port{$index} = $module_to_port{$parent_idx}
+        if exists $module_to_port{$parent_idx};
+
+      last if $seen{$parent_idx}++;
+      $current = $module_by_index{$parent_idx};
+    }
+
+    return;
+  };
+
+  my %port_medium;
+
+  foreach my $module (@modules) {
+    my $medium = module_medium($module) or next;
+    my $port   = $resolve_port_for_module->($module) or next;
+    next unless exists $device_ports->{$port};
+
+    $port_medium{$port} = choose_medium($port_medium{$port}, $medium);
+  }
+
+  foreach my $port (keys %$device_ports) {
+    next unless $device_ports->{$port};
+    next unless $device_ports->{$port}->in_storage;
+
+    my $fallback = infer_port_medium($device_ports->{$port});
+    my $medium   = choose_medium($port_medium{$port}, $fallback);
+    next unless defined $medium;
+
+    $properties{$port} ||= {};
+    $properties{$port}->{cable_type} = $medium;
   }
 
   foreach my $idx (keys %$interfaces) {

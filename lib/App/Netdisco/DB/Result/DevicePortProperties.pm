@@ -51,6 +51,8 @@ __PACKAGE__->add_columns(
   { data_type => "boolean", default_value => \"false", is_nullable => 1 },
   "pae_is_supplicant",
   { data_type => "boolean", default_value => \"false", is_nullable => 1 },
+  "cable_type",
+  { data_type => "text", is_nullable => 1 },
 
 );
 __PACKAGE__->set_primary_key("port", "ip");

@@ -158,6 +158,7 @@ sub with_properties {
           properties.remote_is_phone
           properties.remote_dns
           properties.ifindex
+          properties.cable_type
           properties.pae_authconfig_port_control
           properties.pae_authconfig_state
           properties.pae_authconfig_port_status
@@ -168,11 +169,12 @@ sub with_properties {
         '+as' => [qw/
           error_disable_cause
           remote_is_discoverable remote_is_wap remote_is_phone remote_dns
-          ifindex 
-          pae_authconfig_port_control 
-          pae_authconfig_state 
+          ifindex
+          cable_type
+          pae_authconfig_port_control
+          pae_authconfig_state
           pae_authconfig_port_status
-          pae_authsess_user 
+          pae_authsess_user
           pae_authsess_mab
           pae_last_eapol_frame_source
         /],
